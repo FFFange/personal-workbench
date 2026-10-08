@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>个人工具台</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    background: #f0f2f5;
+    color: #333;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .header {
+    text-align: center;
+    margin-bottom: 20px;
+  }
+  .clock {
+    font-size: 48px;
+    font-weight: bold;
+    color: #2c3e50;
+    font-variant-numeric: tabular-nums;
+  }
+  .date-str { color: #888; margin-top: 4px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px;
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+  .card h2 {
+    font-size: 17px;
+    margin-bottom: 14px;
+    color: #2c3e50;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card h2::before { content: ""; width: 4px; height: 16px; background: #409eff; border-radius: 2px; }
+
+  /* 倒计时 */
+  .countdown-display {
+    text-align: center;
+    padding: 12px 0;
+  }
+  .cd-days {
+    font-size: 56px;
+    font-weight: bold;
+    color: #e6a23c;
+    line-height: 1;
+  }
+  .cd-label { color: #888; margin: 8px 0; }
+  .cd-detail { font-size: 20px; color: #606266; font-variant-numeric: tabular-nums; }
+  .cd-set { margin-top: 12px; display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap; }
+  .cd-set input, .cd-set button {
+    padding: 6px 10px; border: 1px solid #dcdfe6; border-radius: 6px; font-size: 14px;
+  }
+  .cd-set button { background: #409eff; color: #fff; border: none; cursor: pointer; }
+  .cd-set button:hover { background: #66b1ff; }
+
+  /* 课程表 */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { border: 1px solid #ebeef5; padding: 8px 6px; text-align: center; }
+  th { background: #f5f7fa; color: #606266; font-weight: 600; }
+  td[contenteditable] { cursor: text; min-width: 52px; height: 34px; }
+  td[contenteditable]:hover { background: #ecf5ff; }
+  td.today-col { background: #fdf6ec; }
+  .tip { font-size: 12px; color: #c0c4cc; margin-top: 8px; }
+
+  /* 待办 */
+  .todo-input { display: flex; gap: 8px; margin-bottom: 12px; }
+  .todo-input input {
+    flex: 1; padding: 8px 10px; border: 1px solid #dcdfe6; border-radius: 6px; font-size: 14px;
+  }
+  .todo-input button {
+    padding: 8px 16px; background: #67c23a; color: #fff; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;
+  }
+  .todo-input button:hover { background: #85ce61; }
+  .todo-list { list-style: none; max-height: 300px; overflow-y: auto; }
+  .todo-list li {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 4px; border-bottom: 1px solid #f0f0f0; font-size: 14px;
+  }
+  .todo-list li.done .text { text-decoration: line-through; color: #c0c4cc; }
+  .todo-list .text { flex: 1; }
+  .todo-list .del {
+    color: #f56c6c; cursor: pointer; border: none; background: none; font-size: 14px; padding: 2px 6px;
+  }
+  .todo-count { font-size: 12px; color: #909399; margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="clock" id="clock">--:--:--</div>
+  <div class="date-str" id="dateStr"></div>
+</div>
+
+<div class="grid">
+
+  <div class="card">
+    <h2>倒计时</h2>
+    <div class="countdown-display">
+      <div class="cd-days" id="cdDays">-</div>
+      <div class="cd-label" id="cdLabel">天</div>
+      <div class="cd-detail" id="cdDetail"></div>
+    </div>
+    <div class="cd-set">
+      <input type="text" id="cdName" placeholder="事件名，如：秋假" style="width:110px">
+      <input type="date" id="cdDate">
+      <button onclick="setCountdown()">设定</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>课程表</h2>
+    <table id="courseTable">
+      <thead>
+        <tr><th>节次</th><th>一</th><th>二</th><th>三</th><th>四</th><th>五</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <div class="tip">点击格子直接编辑，自动保存。橙色列是今天。</div>
+  </div>
+
+  <div class="card">
+    <h2>待办清单</h2>
+    <div class="todo-input">
+      <input type="text" id="todoInput" placeholder="要做啥？回车添加" onkeydown="if(event.key==='Enter')addTodo()">
+      <button onclick="addTodo()">添加</button>
+    </div>
+    <ul class="todo-list" id="todoList"></ul>
+    <div class="todo-count" id="todoCount"></div>
+  </div>
+
+</div>
+
+<script>
+// ============ 时钟 ============
+function tick() {
+  const now = new Date();
+  document.getElementById("clock").textContent = now.toLocaleTimeString("zh-CN", { hour12: false });
+  const week = ["日","一","二","三","四","五","六"][now.getDay()];
+  document.getElementById("dateStr").textContent =
+    now.getFullYear() + "年" + (now.getMonth()+1) + "月" + now.getDate() + "日 星期" + week;
+}
+setInterval(tick, 1000); tick();
+
+// ============ 倒计时 ============
+const CD_KEY = "my_countdown";
+function loadCountdown() {
+  let cfg = JSON.parse(localStorage.getItem(CD_KEY) || "null");
+  if (!cfg) cfg = { name: "秋假", date: "2026-11-18" }; // 四川多地秋假常见日期，可改
+  document.getElementById("cdName").value = cfg.name;
+  document.getElementById("cdDate").value = cfg.date;
+  return cfg;
+}
+function setCountdown() {
+  const name = document.getElementById("cdName").value.trim() || "目标日";
+  const date = document.getElementById("cdDate").value;
+  if (!date) return alert("先选个日期");
+  localStorage.setItem(CD_KEY, JSON.stringify({ name, date }));
+  renderCountdown();
+}
+function renderCountdown() {
+  const cfg = loadCountdown();
+  const target = new Date(cfg.date + "T00:00:00");
+  const diff = target - new Date();
+  const daysEl = document.getElementById("cdDays");
+  const labelEl = document.getElementById("cdLabel");
+  const detailEl = document.getElementById("cdDetail");
+  if (diff <= 0) {
+    daysEl.textContent = "🎉";
+    labelEl.textContent = cfg.name + "到了！";
+    detailEl.textContent = "";
+    return;
+  }
+  const d = Math.floor(diff / 86400000);
+  const h = Math.floor(diff % 86400000 / 3600000);
+  const m = Math.floor(diff % 3600000 / 60000);
+  const s = Math.floor(diff % 60000 / 1000);
+  daysEl.textContent = d;
+  labelEl.textContent = "天后就是" + cfg.name;
+  detailEl.textContent = h + " 时 " + m + " 分 " + s + " 秒";
+}
+setInterval(renderCountdown, 1000); renderCountdown();
+
+// ============ 课程表 ============
+const COURSE_KEY = "my_courses";
+const PERIODS = ["1", "2", "3", "4", "5", "6", "7", "8"];
+function getCourses() {
+  let data = JSON.parse(localStorage.getItem(COURSE_KEY) || "null");
+  if (!data) {
+    data = PERIODS.map(() => ["", "", "", "", ""]);
+  }
+  return data;
+}
+function renderCourses() {
+  const data = getCourses();
+  const today = new Date().getDay(); // 1-5 对应周一到周五
+  const tbody = document.querySelector("#courseTable tbody");
+  tbody.innerHTML = "";
+  data.forEach((row, i) => {
+    const tr = document.createElement("tr");
+    const th = document.createElement("td");
+    th.textContent = "第" + PERIODS[i] + "节";
+    tr.appendChild(th);
+    row.forEach((cell, j) => {
+      const td = document.createElement("td");
+      td.contentEditable = true;
+      td.textContent = cell;
+      if (today >= 1 && today <= 5 && j === today - 1) td.className = "today-col";
+      td.onblur = () => {
+        const d = getCourses();
+        d[i][j] = td.textContent.trim();
+        localStorage.setItem(COURSE_KEY, JSON.stringify(d));
+      };
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+}
+renderCourses();
+
+// ============ 待办 ============
+const TODO_KEY = "my_todos";
+function getTodos() { return JSON.parse(localStorage.getItem(TODO_KEY) || "[]"); }
+function saveTodos(list) { localStorage.setItem(TODO_KEY, JSON.stringify(list)); }
+function addTodo() {
+  const input = document.getElementById("todoInput");
+  const text = input.value.trim();
+  if (!text) return;
+  const list = getTodos();
+  list.push({ text, done: false });
+  saveTodos(list);
+  input.value = "";
+  renderTodos();
+}
+function toggleTodo(i) {
+  const list = getTodos();
+  list[i].done = !list[i].done;
+  saveTodos(list);
+  renderTodos();
+}
+function delTodo(i) {
+  const list = getTodos();
+  list.splice(i, 1);
+  saveTodos(list);
+  renderTodos();
+}
+function renderTodos() {
+  const list = getTodos();
+  const ul = document.getElementById("todoList");
+  ul.innerHTML = "";
+  list.forEach((item, i) => {
+    const li = document.createElement("li");
+    if (item.done) li.className = "done";
+    const cb = document.createElement("input");
+    cb.type = "checkbox"; cb.checked = item.done;
+    cb.onchange = () => toggleTodo(i);
+    const span = document.createElement("span");
+    span.className = "text"; span.textContent = item.text;
+    const del = document.createElement("button");
+    del.className = "del"; del.textContent = "删";
+    del.onclick = () => delTodo(i);
+    li.appendChild(cb); li.appendChild(span); li.appendChild(del);
+    ul.appendChild(li);
+  });
+  const left = list.filter(t => !t.done).length;
+  document.getElementById("todoCount").textContent =
+    list.length ? "共 " + list.length + " 项，还剩 " + left + " 项没干" : "空空如也，加一条吧";
+}
+renderTodos();
+</script>
+
+</body>
+</html>
